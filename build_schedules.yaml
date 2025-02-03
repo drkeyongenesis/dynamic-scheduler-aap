@@ -1,0 +1,152 @@
+---
+## Pre check schedules
+
+- name: Set pre_check date
+  set_fact:
+    pre_check_date: "{{ '%Y-%m-%d %H:%M:00' | strftime(( (item.update_time | to_datetime('%Y-%m-%dT%H:%M:%S')).strftime('%s'))|int - (60*60*24*7)) }}"
+
+- name: Set rrule fact
+  set_fact:
+    rrule_pre_check: "DTSTART:{{ (pre_check_date | to_datetime('%Y-%m-%d %H:%M:%S')).strftime('%Y%m%dT%H%M00Z') }} RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1"
+
+- name: Get pre check schedule
+  ansible.builtin.uri:
+    url: "{{ controller_uri }}/api/v2/job_templates/{{ pre_check_template_id }}/schedules/?rrule__exact={{ rrule_pre_check | urlencode }}"
+    body_format: json
+    validate_certs: false
+    return_content: true
+    method: GET
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ controller_token }}"
+  register: pre_check_schedules_data
+
+- name: Set pre_check_schedules fact
+  set_fact:
+    pre_check_schedules: "{{ pre_check_schedules_data.json.results }}"
+
+- name: Create Pre Check Schedule
+  ansible.builtin.uri:
+    url: "{{ controller_uri }}/api/v2/schedules/"
+    body_format: json
+    validate_certs: false
+    return_content: true
+    method: POST
+    status_code: [200, 201]
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ controller_token }}"
+    body:
+      name: "Pre Check - {{ pre_check_date }}"
+      unified_job_template: "{{ pre_check_template_id }}"
+      rrule: "{{ rrule_pre_check }}"
+  register: pre_check_schedule
+  changed_when: pre_check_schedule.status == 201
+  when: pre_check_schedules | selectattr('rrule','equalto',rrule_pre_check) | list | count == 0
+
+- name: Update pre_check_schedules fact
+  set_fact:
+    pre_check_schedules: "{{ pre_check_schedules + [pre_check_schedule.json] }}"
+  when: pre_check_schedule.changed
+
+- name: Update DB - Pre Checks scheduled
+  community.mysql.mysql_query:
+    login_host: "{{ db_host }}"
+    login_db: patching
+    login_user: root
+    login_password: "{{ mysql_passwd }}"
+    login_port: "{{ db_port }}"
+    query: "update patch set status = 'PreCheckScheduled', pre_checks_schedule_id=%s, pre_checks_time=%s, pre_checks_created=1 where id=%s"
+    positional_args:
+      - "{{ pre_check_schedule.json.id }}"
+      - "{{ pre_check_date }}"
+      - "{{ item.id }}"
+  when: pre_check_schedule.changed
+
+- name: Update DB - Pre Checks scheduled
+  community.mysql.mysql_query:
+    login_host: "{{ db_host }}"
+    login_db: patching
+    login_user: root
+    login_password: "{{ mysql_passwd }}"
+    login_port: "{{ db_port }}"
+    query: "update patch set status = 'PreCheckScheduled', pre_checks_schedule_id=%s, pre_checks_time=%s, pre_checks_created=1 where id=%s"
+    positional_args:
+      - "{{ (pre_check_schedules | selectattr('rrule','equalto',rrule_pre_check) | first).id }}"
+      - "{{ pre_check_date }}"
+      - "{{ item.id }}"
+  when: pre_check_schedule is not changed
+
+## Patch Schedules
+
+- name: Set update date
+  set_fact:
+    update_date_time: "{{ item.update_time | to_datetime('%Y-%m-%dT%H:%M:00')}}"
+
+- name: Set patch rrule fact
+  set_fact:
+    rrule_patch: "DTSTART:{{ (update_date_time | to_datetime('%Y-%m-%d %H:%M:%S')).strftime('%Y%m%dT%H%M00Z') }} RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1"
+
+- name: Get patch schedules
+  ansible.builtin.uri:
+    url: "{{ controller_uri }}/api/v2/job_templates/{{ patch_template_id }}/schedules/?rrule__exact={{ rrule_patch | urlencode }}"
+    body_format: json
+    validate_certs: false
+    return_content: true
+    method: GET
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{ controller_token }}"
+  register: patch_schedules_data
+
+- name: Set patch_schedules fact
+  set_fact:
+    patch_schedules: "{{ patch_schedules_data.json.results }}"
+
+- name: Create Patch Schedule
+  ansible.builtin.uri:
+    url: "{{ controller_uri }}/api/v2/schedules/"
+    body_format: json
+    validate_certs: false
+    method: POST
+    status_code: [200, 201]
+    headers:
+      Authorization: "Bearer {{ controller_token }}"
+    body:
+      name: "Patch - {{ update_date_time }}"
+      unified_job_template: "{{ patch_template_id }}"
+      rrule: "DTSTART:{{ (update_date_time | to_datetime('%Y-%m-%d %H:%M:%S')).strftime('%Y%m%dT%H%M00Z') }} RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1"
+  register: update_schedule
+  changed_when: update_schedule.status == 201
+  when: patch_schedules | selectattr('rrule','equalto',rrule_patch) | list | count == 0
+
+- name: Update patch_schedules fact
+  set_fact:
+    patch_schedules: "{{ patch_schedules + [update_schedule.json] }}"
+  when: update_schedule.changed
+
+- name: Update DB - Patching scheduled
+  community.mysql.mysql_query:
+    login_host: "{{ db_host }}"
+    login_db: patching
+    login_user: root
+    login_password: "{{ mysql_passwd }}"
+    login_port: "{{ db_port }}"
+    query: "update patch set patch_schedule_id=%s, patch_created=1 where id=%s"
+    positional_args:
+      - "{{ update_schedule.json.id }}"
+      - "{{ item.id }}"
+  when: update_schedule.changed
+
+- name: Update DB - Patching scheduled
+  community.mysql.mysql_query:
+    login_host: "{{ db_host }}"
+    login_db: patching
+    login_user: root
+    login_password: "{{ mysql_passwd }}"
+    login_port: "{{ db_port }}"
+    query: "update patch set patch_schedule_id=%s, patch_created=1 where id=%s"
+    positional_args:
+      - "{{ (patch_schedules | selectattr('rrule','equalto',rrule_patch) | first).id }}"
+      - "{{ item.id }}"
+  when: update_schedule is not changed

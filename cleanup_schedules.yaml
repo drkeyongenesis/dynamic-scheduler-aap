@@ -1,0 +1,37 @@
+---
+- name: Cleanup Schedules
+  hosts: 127.0.0.1
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Get Pre Check Schedules
+      ansible.builtin.uri:
+        url: "{{ controller_uri }}/api/v2/job_templates/{{ item }}/schedules?order_by=-next_run&page_size=400"
+        body_format: json
+        validate_certs: false
+        return_content: true
+        method: GET
+        status_code: [200, 201]
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{ controller_token }}"
+      register: schedules_raw
+      loop: "{{ template_ids }}"
+
+    - name: Build schedules fact
+      set_fact:
+        schedules: "{{ schedules | default([]) + item.json.results }}"
+      loop: "{{ schedules_raw.results }}"
+
+    - name: Cleanup Schedules
+      ansible.builtin.uri:
+        url: "{{ controller_uri }}/api/v2/schedules/{{ item.id }}/"
+        body_format: json
+        validate_certs: false
+        return_content: true
+        method: DELETE
+        status_code: [200, 201, 204]
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{ controller_token }}"
+      loop: "{{ schedules | selectattr('next_run','none') }}"

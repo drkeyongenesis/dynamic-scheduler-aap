@@ -1,0 +1,53 @@
+---
+- name: Run Updates
+  hosts: 127.0.0.1
+  connection: local
+  gather_facts: false
+  vars:
+    api_host: "http://192.168.122.12:8080/patch"
+
+  tasks:
+    # Using shell as ansible_date_time fact returns UTC
+    - name: Get update date
+      shell: "date +'%Y-%m-%d %H:%M'"
+      register: shell_update_date
+
+    - name: Set update date
+      set_fact:
+        update_date: "{{ shell_update_date.stdout }}"
+
+    - name: Query filter
+      debug:
+        var: update_date
+
+    - name: Get hosts from API
+      ansible.builtin.uri:
+        url: "{{ api_host}}/date/{{ update_date | urlencode }}"
+        return_content: true
+      register: api_results
+
+    - name: Add hosts to Inventory
+      ansible.builtin.add_host:
+        name: "{{ item.Server }}"
+        groups: update
+        id: "{{ item.ID }}"
+      loop: "{{ api_results.content }}"
+      where: item.Status == "PreChecksComplete"
+
+- name: Run pre checks
+  hosts: update
+  connection: local
+  vars:
+    api_host: "http://192.168.122.12:8080/patch"
+  tasks:
+    - name: Pause for 5 minutes to simulate update
+      ansible.builtin.pause:
+        minutes: 2
+    - name: Update API - Patch Complete
+      ansible.builtin.uri:
+        url: "{{ api_host}}/{{ id }}"
+        method: PUT
+        body_format: json
+        body:
+          Status: "PatchComplete"
+          PatchJobID: "{{ tower_job_id | string }}"

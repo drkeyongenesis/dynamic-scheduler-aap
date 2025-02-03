@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql-container
+    environment:
+      MYSQL_ROOT_PASSWORD:   # Set root password
+    ports:
+      - "3306:3306"  # Expose MySQL port to the host
+    networks:
+      mysql-network:
+        ipv4_address: 192.168.122.12  # Assign static IP within the custom subnet
+    volumes:
+      - mysql-data:/var/lib/mysql  # Persist MySQL data
+    restart: always  # Optional: Automatically restart container if it crashes
+
+networks:
+  mysql-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "192.168.122.0/24"  # Define a subnet for static IP addresses
+
+volumes:
+  mysql-data:
+    driver: local
