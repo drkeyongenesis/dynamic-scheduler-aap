@@ -4,6 +4,8 @@
   connection: local
   gather_facts: false
   tasks:
+    ## This task fetches the list of schedules from Ansible Tower for each template ID in the template_ids list. It retrieves up to 400 schedules per API call, sorted by the next scheduled run in descending order. 
+    ## Each schedule’s details are stored in the schedules_raw variable.
     - name: Get Pre Check Schedules
       ansible.builtin.uri:
         url: "{{ controller_uri }}/api/v2/job_templates/{{ item }}/schedules?order_by=-next_run&page_size=400"
@@ -17,12 +19,14 @@
           Authorization: "Bearer {{ controller_token }}"
       register: schedules_raw
       loop: "{{ template_ids }}"
-
+      
+    ## This task combines the results of all the individual API calls and stores them in a schedules fact. It ensures that the results from each loop iteration are concatenated into a single list of schedules.
     - name: Build schedules fact
       set_fact:
         schedules: "{{ schedules | default([]) + item.json.results }}"
       loop: "{{ schedules_raw.results }}"
-
+      
+    ## This task deletes the schedules that have a next_run value of none. The next_run field typically indicates when the schedule is next due to run, so if it’s none, it means the schedule has no further execution planned, and it can be safely removed.
     - name: Cleanup Schedules
       ansible.builtin.uri:
         url: "{{ controller_uri }}/api/v2/schedules/{{ item.id }}/"
