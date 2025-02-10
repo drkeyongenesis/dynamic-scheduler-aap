@@ -82,8 +82,22 @@ The original scheduling functionality in AAP is good for static schedules but do
 
 ## Future Enhancements
 
+1) Error Handling:
 - Add error handling and logging to ensure the scheduling process is robust and traceable.
+- Consider adding error handling after each API request to ensure the API responses are valid before moving forward with further tasks. 
 - Implement more complex scheduling logic to handle different time zones and recurring patching tasks.
+- Potential Improvements and Considerations
+
+2) Authentication Token:
+- Ensure that the controller_token is securely handled, either through Ansible Vault or environment variables, rather than hardcoding it in the playbook.
+
+Pre-check and Patch Schedule Logic:
+Depending on the context, you may need additional logic to check whether a schedule already exists before creating a new one. This can prevent duplicate schedules from being created for the same hosts.
+
+Dynamic Variables:
+It might be useful to make some variables like pre_check_template_id or patch_template_id dynamic by passing them at runtime as extra variables or setting them as facts.
+
+
 
 ## Resources
 
