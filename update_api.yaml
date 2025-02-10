@@ -7,25 +7,30 @@
     api_host: "http://192.168.122.12:8080/patch"
 
   tasks:
-    # Using shell as ansible_date_time fact returns UTC
+    ## Using shell as ansible_date_time fact returns UTC
+    ## This task calculates the current date and time in the 'YYYY-MM-DD HH:MM' format to filter the hosts scheduled for updates. This ensures we are querying for updates that will be performed at the correct time.
     - name: Get update date
       shell: "date +'%Y-%m-%d %H:%M'"
       register: shell_update_date
 
+    ## After executing the shell command to fetch the date, the result is stored in the variable update_date, making it available for the API query in the next task.
     - name: Set update date
       set_fact:
         update_date: "{{ shell_update_date.stdout }}"
-
+        
+    ## A debug task is included to print the computed update_date to help with troubleshooting and verification. This step ensures that the correct date and time are being used for querying the API.
     - name: Query filter
       debug:
         var: update_date
 
+    ## This task makes a GET request to the API with the date we calculated earlier to fetch all hosts that are scheduled for an update at that time. It stores the response in the api_results variable.
     - name: Get hosts from API
       ansible.builtin.uri:
         url: "{{ api_host}}/date/{{ update_date | urlencode }}"
         return_content: true
       register: api_results
 
+    ## The task filters the hosts that are ready for an update (those with a Status of "PreChecksComplete") and dynamically adds them to the update group in the inventory. It uses the Server as the name and ID as the identifier for each host.
     - name: Add hosts to Inventory
       ansible.builtin.add_host:
         name: "{{ item.Server }}"
@@ -40,9 +45,12 @@
   vars:
     api_host: "http://192.168.122.12:8080/patch"
   tasks:
+    ## This task introduces a delay (pause) to simulate the time taken for a real update to complete. The time is set to 2 minutes, but it can be adjusted depending on the real-world scenario.
     - name: Pause for 5 minutes to simulate update
       ansible.builtin.pause:
         minutes: 2
+
+    ## This task sends a PUT request to update the patching status of each host. After the update is simulated, the status is set to "PatchComplete", and the PatchJobID is sent along with the request to reflect the completion of the patch process in the API.
     - name: Update API - Patch Complete
       ansible.builtin.uri:
         url: "{{ api_host}}/{{ id }}"
