@@ -12,8 +12,8 @@ flowchart TD
     I --> J[Execute MySQL INSERT Query]
     J --> |INSERT INTO patching.patch| K{Check MySQL Execution}
 
-    K --> |Success| L[Print: Patch Scheduled]
-    K --> |Failure| M[Print: Error Scheduling]
+    K --> |Success| L[Print Patch Scheduled]
+    K --> |Failure| M[Print Error Scheduling]
 
     L --> N[Increment minutes_in_front by 5]
     M --> N
