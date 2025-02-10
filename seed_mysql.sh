@@ -22,4 +22,11 @@ for i in {1..5}; do
     VALUES ('$server', 'Booked', '$scheduled_update_time:$minute:00');
   "
 
+
+  '''
+  For each loop iteration, you should see something like:
+  Scheduled Update: server1.boschsg 2025-02-17 10:30:00
+  Inserted Schedule ID: 1234
+  '''
+
 done
