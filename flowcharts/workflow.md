@@ -1,6 +1,6 @@
 
 ```mermaid
-flowchart TD
+flowchart TD;
     A(Start) --> B{Initialize Variables}
     B --> |minutes_in_front = 5| C
     C --> |days_in_front = 7| D
