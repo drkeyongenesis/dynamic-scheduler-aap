@@ -1,4 +1,6 @@
 ---
+## This part focuses on calculating the schedule date and getting a list of hosts from an API. The update_date is set to 7 days ahead of the current date,
+## and the result is sent to a URL where the hosts are fetched. These hosts are then added to the Ansible inventory group pre_check.
 - name: Create Schedules
   hosts: 127.0.0.1
   connection: local
@@ -6,29 +8,36 @@
   vars:
     api_host: "http://192.168.122.12:8080/patch"
   tasks:
-    # Using shell as ansible_date_time fact returns UTC
+    ## Using shell as ansible_date_time fact returns UTC
+    ## We calculate the date 7 days from the current date using the date shell command. The date is set in the update_date variable.
     - name: Set update date
       shell: "date +'%Y-%m-%d %H:%M' -d '+7 days'"
       register: shell_update_date
 
+    ## The date calculated from the previous step is then set as a fact (update_date).
     - name: Set update date
       set_fact:
         update_date: "{{ shell_update_date.stdout }}"
 
+    ## A simple debug task to output the update_date for verification.
     - name: Query filter
       debug:
         var: update_date
-
+        
+    ## This debug task outputs the URL that will be used to get the hosts from the API. The update_date is URL-encoded to avoid issues with special characters in the date string.
     - name: Debug url
       debug:
         msg: "{{ api_host}}/date/{{ update_date | urlencode }}"
 
+    ## A GET request is sent to the specified API to retrieve a list of hosts for the calculated update_date. The results are stored in api_results.
     - name: Get hosts from API
       ansible.builtin.uri:
         url: "{{ api_host}}/date/{{ update_date | urlencode }}"
         return_content: true
       register: api_results
 
+    ## Using the data from api_results, the playbook adds each host to the pre_check inventory group. It loops over each item in the response (api_results.content) and uses add_host to add each server by Server name and ID.
+    ## Hopefully we achieve dynamic inventory (
     - name: Add hosts to Inventory
       ansible.builtin.add_host:
         name: "{{ item.Server }}"
@@ -36,20 +45,24 @@
         id: "{{ item.ID }}"
       loop: "{{ api_results.content }}"
 
+## In this part, the hosts in the pre_check group will have pre-checks simulated. After completing the pre-checks, it updates the API with the status of the pre-checks.
 - name: Run pre checks
   hosts: pre_check
   connection: local
   vars:
     api_host: "http://192.168.122.12:8080/patch"
   tasks:
+    ## This debug task will print the id variable, which should correspond to each host added in the first task.
     - name: Debug inventory
       debug:
         var: id
 
+    ## This task pauses the execution for 2 minutes to simulate the pre-check process. This gives a simulated delay to represent time taken for the pre-checks.
     - name: Pause for 2 minutes to simulate pre checks
       ansible.builtin.pause:
         minutes: 2
 
+    ## Once the pre-checks are simulated, this task sends a PUT request to the API to update the status of the pre-check for the host, including a PreCheckJobID (which can be tied to a job in AAP) and status values.
     - name: Update API - Pre Checks Complete
       ansible.builtin.uri:
         url: "{{ api_host}}/{{ id }}"
