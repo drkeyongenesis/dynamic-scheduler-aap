@@ -5,16 +5,19 @@
   vars:
     api_host: "http://192.168.122.12:8080/patch"
   tasks:
+    ## This task calculates the update date, which is 7 days from the current date. It uses Ansible's strftime function and the epoch time to generate a date string in the YYYY-MM-DD format.
     - name: Set update date query
       set_fact:
         update_date: "{{ '%Y-%m-%d' | strftime( (ansible_date_time.epoch|int) + (60*60*24*7) ) }}"
 
+    ## Once the update date is calculated, this task uses the uri module to send a GET request to an API endpoint that returns a list of hosts for the calculated update_date. The results are stored in api_results.
     - name: Get hosts from API
       ansible.builtin.uri:
         url: "{{ api_host}}/date/{{ update_date }}"
         return_content: true
       register: api_results
 
+    ## This task queries for existing pre-check schedules using the uri module and stores the data in pre_check_schedules_data.
     - name: Get pre check schedules
       ansible.builtin.uri:
         url: "{{ controller_uri }}/api/v2/job_templates/{{ pre_check_template_id }}/schedules/"
@@ -26,11 +29,13 @@
           Content-Type: application/json
           Authorization: "Bearer {{ controller_token }}"
       register: pre_check_schedules_data
-
+    
+    ## The pre-check schedule data received from the previous task is stored in a fact named pre_check_schedules for later use.
     - name: Set pre_check_schedules fact
       set_fact:
         pre_check_schedules: "{{ pre_check_schedules_data.json.results }}"
 
+    ## This task queries the controller API for the patch schedules based on the provided patch template ID and stores the results in patch_schedules_data.
     - name: Get patch schedules
       ansible.builtin.uri:
         url: "{{ controller_uri }}/api/v2/job_templates/{{ patch_template_id }}/schedules/"
@@ -43,6 +48,7 @@
           Authorization: "Bearer {{ controller_token }}"
       register: patch_schedules_data
 
+    ## After retrieving the patch schedules, the task stores the results in a fact named patch_schedules.
     - name: Set patch_schedules fact
       set_fact:
         patch_schedules: "{{ patch_schedules_data.json.results }}"
