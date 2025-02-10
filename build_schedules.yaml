@@ -1,14 +1,17 @@
 ---
-## Pre check schedules
+## Pre-check Schedules Workflow
 
+## This task calculates the pre-check date by subtracting 7 days (1 week) from the update_time of each item, and formats it as YYYY-MM-DD HH:MM:00. This date will be used to set the pre-check schedule.
 - name: Set pre_check date
   set_fact:
     pre_check_date: "{{ '%Y-%m-%d %H:%M:00' | strftime(( (item.update_time | to_datetime('%Y-%m-%dT%H:%M:%S')).strftime('%s'))|int - (60*60*24*7)) }}"
 
+## This task sets the recurrence rule (RRULE) for the pre-check schedule. The rule specifies that the pre-check will occur daily starting from the pre-check date, and it will repeat for 1 occurrence.
 - name: Set rrule fact
   set_fact:
     rrule_pre_check: "DTSTART:{{ (pre_check_date | to_datetime('%Y-%m-%d %H:%M:%S')).strftime('%Y%m%dT%H%M00Z') }} RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1"
 
+## This task queries the Ansible Tower API to check if a pre-check schedule with the same rrule_pre_check already exists. It filters by rrule to avoid creating duplicate schedules.
 - name: Get pre check schedule
   ansible.builtin.uri:
     url: "{{ controller_uri }}/api/v2/job_templates/{{ pre_check_template_id }}/schedules/?rrule__exact={{ rrule_pre_check | urlencode }}"
@@ -21,10 +24,12 @@
       Authorization: "Bearer {{ controller_token }}"
   register: pre_check_schedules_data
 
+## This task sets the pre_check_schedules fact by extracting the results from the previous API response.
 - name: Set pre_check_schedules fact
   set_fact:
     pre_check_schedules: "{{ pre_check_schedules_data.json.results }}"
 
+## If the schedule does not exist, a new pre-check schedule is created. It uses the pre_check_date and the rrule_pre_check to create the schedule in Ansible Tower.
 - name: Create Pre Check Schedule
   ansible.builtin.uri:
     url: "{{ controller_uri }}/api/v2/schedules/"
@@ -44,11 +49,13 @@
   changed_when: pre_check_schedule.status == 201
   when: pre_check_schedules | selectattr('rrule','equalto',rrule_pre_check) | list | count == 0
 
+## If a new pre-check schedule was created, this task updates the pre_check_schedules list by adding the new schedule.
 - name: Update pre_check_schedules fact
   set_fact:
     pre_check_schedules: "{{ pre_check_schedules + [pre_check_schedule.json] }}"
   when: pre_check_schedule.changed
 
+## Once the pre-check schedule is created, it updates the database to mark the item as having a scheduled pre-check.
 - name: Update DB - Pre Checks scheduled
   community.mysql.mysql_query:
     login_host: "{{ db_host }}"
@@ -63,6 +70,7 @@
       - "{{ item.id }}"
   when: pre_check_schedule.changed
 
+## If the pre-check schedule already exists (i.e., it's not created), this task updates the database with the existing pre-check schedule ID.
 - name: Update DB - Pre Checks scheduled
   community.mysql.mysql_query:
     login_host: "{{ db_host }}"
@@ -77,16 +85,19 @@
       - "{{ item.id }}"
   when: pre_check_schedule is not changed
 
-## Patch Schedules
+## Patch Schedule Workflow:
 
+## This task converts the update_time of each item to a datetime object and stores it in the update_date_time variable.
 - name: Set update date
   set_fact:
     update_date_time: "{{ item.update_time | to_datetime('%Y-%m-%dT%H:%M:00')}}"
 
+## Similar to pre-checks, this task sets the recurrence rule for the patch schedule.
 - name: Set patch rrule fact
   set_fact:
     rrule_patch: "DTSTART:{{ (update_date_time | to_datetime('%Y-%m-%d %H:%M:%S')).strftime('%Y%m%dT%H%M00Z') }} RRULE:FREQ=DAILY;INTERVAL=1;COUNT=1"
 
+## This task queries the Ansible Tower API for existing patch schedules, filtered by the rrule_patch to avoid duplication.
 - name: Get patch schedules
   ansible.builtin.uri:
     url: "{{ controller_uri }}/api/v2/job_templates/{{ patch_template_id }}/schedules/?rrule__exact={{ rrule_patch | urlencode }}"
@@ -98,11 +109,13 @@
       Content-Type: application/json
       Authorization: "Bearer {{ controller_token }}"
   register: patch_schedules_data
-
+  
+## This task sets the patch_schedules fact by extracting the results from the previous API response.
 - name: Set patch_schedules fact
   set_fact:
     patch_schedules: "{{ patch_schedules_data.json.results }}"
 
+## If the patch schedule doesn't already exist, a new one is created using the update_date_time and rrule_patch.
 - name: Create Patch Schedule
   ansible.builtin.uri:
     url: "{{ controller_uri }}/api/v2/schedules/"
@@ -120,11 +133,13 @@
   changed_when: update_schedule.status == 201
   when: patch_schedules | selectattr('rrule','equalto',rrule_patch) | list | count == 0
 
+## If a new patch schedule was created, this task updates the patch_schedules list by adding the new schedule.
 - name: Update patch_schedules fact
   set_fact:
     patch_schedules: "{{ patch_schedules + [update_schedule.json] }}"
   when: update_schedule.changed
 
+## After creating the patch schedule, this task updates the database with the patch schedule ID.
 - name: Update DB - Patching scheduled
   community.mysql.mysql_query:
     login_host: "{{ db_host }}"
@@ -138,6 +153,7 @@
       - "{{ item.id }}"
   when: update_schedule.changed
 
+## If the patch schedule already exists, the database is updated with the existing schedule ID,
 - name: Update DB - Patching scheduled
   community.mysql.mysql_query:
     login_host: "{{ db_host }}"
